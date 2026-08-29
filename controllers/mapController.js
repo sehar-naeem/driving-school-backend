@@ -9,9 +9,9 @@ const Vehicle = require('../models/Vehicle');
 exports.getAllVehicleLocations = async (req, res) => {
   try {
     const vehicles = await Vehicle.find()
-      .populate('current_instructor_id', 'full_name')
+      .populate('current_instructor_id', 'full_name email phone')
       .select(
-        'registration_number model status latitude longitude last_location_update current_instructor_id'
+        'registration_number model status latitude longitude last_location_update current_instructor_id time_slot session_start'
       );
 
     const locations = vehicles.map(vehicle => ({
@@ -19,9 +19,12 @@ exports.getAllVehicleLocations = async (req, res) => {
       registration_number: vehicle.registration_number,
       model: vehicle.model,
       status: vehicle.status,
+      time_slot: vehicle.time_slot,
+      session_start: vehicle.session_start,
       instructor: vehicle.current_instructor_id
         ? vehicle.current_instructor_id.full_name
         : null,
+      instructor_details: vehicle.current_instructor_id || null,
       coordinates: {
         latitude: vehicle.latitude,
         longitude: vehicle.longitude
@@ -52,9 +55,9 @@ exports.getAllVehicleLocations = async (req, res) => {
 exports.getVehicleLocation = async (req, res) => {
   try {
     const vehicle = await Vehicle.findById(req.params.id)
-      .populate('current_instructor_id', 'full_name')
+      .populate('current_instructor_id', 'full_name email phone')
       .select(
-        'registration_number model status latitude longitude last_location_update current_instructor_id'
+        'registration_number model status latitude longitude last_location_update current_instructor_id time_slot session_start'
       );
 
     if (!vehicle) {
@@ -71,9 +74,12 @@ exports.getVehicleLocation = async (req, res) => {
         registration_number: vehicle.registration_number,
         model: vehicle.model,
         status: vehicle.status,
+        time_slot: vehicle.time_slot,
+        session_start: vehicle.session_start,
         instructor: vehicle.current_instructor_id
           ? vehicle.current_instructor_id.full_name
           : null,
+        instructor_details: vehicle.current_instructor_id || null,
         coordinates: {
           latitude: vehicle.latitude,
           longitude: vehicle.longitude
@@ -92,7 +98,7 @@ exports.getVehicleLocation = async (req, res) => {
 };
 
 /**
- * @desc    Get address from coordinates using Google Maps Geocoding API
+ * @desc    Get address from coordinates using free OpenStreetMap Nominatim
  * @route   GET /api/map/geocode
  * @access  Private
  */
@@ -107,27 +113,26 @@ exports.geocodeLocation = async (req, res) => {
       });
     }
 
-    const response = await axios.get(
-      'https://maps.googleapis.com/maps/api/geocode/json',
-      {
-        params: {
-          latlng: `${latitude},${longitude}`,
-          key: process.env.GOOGLE_MAPS_API_KEY
-        }
+    const response = await axios.get('https://nominatim.openstreetmap.org/reverse', {
+      params: {
+        format: 'json',
+        lat: latitude,
+        lon: longitude
+      },
+      headers: {
+        'User-Agent': 'DrivingSchoolManagement/1.0'
       }
-    );
+    });
 
-    if (response.data.status === 'OK' && response.data.results.length > 0) {
-      const address = response.data.results[0].formatted_address;
-
+    if (response.data && response.data.display_name) {
       res.json({
         success: true,
         coordinates: {
           latitude: parseFloat(latitude),
           longitude: parseFloat(longitude)
         },
-        address,
-        fullResponse: response.data.results[0]
+        address: response.data.display_name,
+        fullResponse: response.data
       });
     } else {
       res.status(404).json({
@@ -146,7 +151,7 @@ exports.geocodeLocation = async (req, res) => {
 };
 
 /**
- * @desc    Get coordinates from address using Google Maps Geocoding API
+ * @desc    Get coordinates from address using free OpenStreetMap Nominatim
  * @route   GET /api/map/search
  * @access  Private
  */
@@ -161,26 +166,24 @@ exports.searchLocation = async (req, res) => {
       });
     }
 
-    const response = await axios.get(
-      'https://maps.googleapis.com/maps/api/geocode/json',
-      {
-        params: {
-          address,
-          key: process.env.GOOGLE_MAPS_API_KEY
-        }
+    const response = await axios.get('https://nominatim.openstreetmap.org/search', {
+      params: {
+        format: 'json',
+        q: address
+      },
+      headers: {
+        'User-Agent': 'DrivingSchoolManagement/1.0'
       }
-    );
+    });
 
-    if (response.data.status === 'OK' && response.data.results.length > 0) {
-      const result = response.data.results[0];
-      const location = result.geometry.location;
-
+    if (response.data && response.data.length > 0) {
+      const result = response.data[0];
       res.json({
         success: true,
-        address: result.formatted_address,
+        address: result.display_name,
         coordinates: {
-          latitude: location.lat,
-          longitude: location.lng
+          latitude: parseFloat(result.lat),
+          longitude: parseFloat(result.lon)
         },
         fullResponse: result
       });
@@ -201,7 +204,7 @@ exports.searchLocation = async (req, res) => {
 };
 
 /**
- * @desc    Get route between two points using Google Maps Directions API
+ * @desc    Get route between two points
  * @route   GET /api/map/route
  * @access  Private
  */
@@ -217,27 +220,17 @@ exports.getRoute = async (req, res) => {
     }
 
     const response = await axios.get(
-      'https://maps.googleapis.com/maps/api/directions/json',
-      {
-        params: {
-          origin: `${origin_lat},${origin_lng}`,
-          destination: `${dest_lat},${dest_lng}`,
-          key: process.env.GOOGLE_MAPS_API_KEY
-        }
-      }
+      'https://router.project-osrm.org/route/v1/driving/' + origin_lng + ',' + origin_lat + ';' + dest_lng + ',' + dest_lat + '?overview=full&geometries=geojson'
     );
 
-    if (response.data.status === 'OK' && response.data.routes.length > 0) {
+    if (response.data && response.data.routes && response.data.routes.length > 0) {
       const route = response.data.routes[0];
-
       res.json({
         success: true,
         route: {
-          distance: route.legs[0].distance,
-          duration: route.legs[0].duration,
-          start_address: route.legs[0].start_address,
-          end_address: route.legs[0].end_address,
-          polyline: route.overview_polyline.points
+          distance: { text: (route.distance / 1000).toFixed(2) + ' km', value: route.distance },
+          duration: { text: Math.round(route.duration / 60) + ' mins', value: route.duration },
+          geometry: route.geometry
         }
       });
     } else {

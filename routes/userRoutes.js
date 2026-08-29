@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const Vehicle = require('../models/Vehicle');
 const authMiddleware = require('../middleware/authMiddleware');
 
 // Middleware to check if user is admin
@@ -16,58 +17,43 @@ const isAdmin = (req, res, next) => {
 };
 
 // ==========================================
-// GET ALL INSTRUCTORS
-// ==========================================
-// ==========================================
-// GET ALL INSTRUCTORS - FIXED
-// ==========================================
-router.get('/instructors',authMiddleware ,async (req, res) => {
-  try {
-    const instructors = await User.find({ role: 'instructor' })
-      .select('-password')
-      .sort({ createdAt: -1 })
-      .lean(); // ← IMPORTANT: Convert to plain objects
-    
-    // ✅ Map _id to id for frontend compatibility
-    const instructorsWithId = instructors.map(inst => ({
-      ...inst,
-      id: inst._id.toString(), // ← ADD THIS LINE
-      _id: inst._id.toString()
-    }));
-    
-    res.json({
-      success: true,
-      instructors: instructorsWithId, // ← Use mapped array
-      count: instructorsWithId.length
-    });
-  } catch (error) {
-    console.error('Get instructors error:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Failed to fetch instructors' 
-    });
-  }
-});
-
-// ==========================================
-// GET INSTRUCTOR BY ID
-// ==========================================
-// ==========================================
-// GET ALL INSTRUCTORS - FIXED
+// GET ALL INSTRUCTORS (with live busy status)
 // ==========================================
 router.get('/instructors', authMiddleware, async (req, res) => {
   try {
     const instructors = await User.find({ role: 'instructor' })
       .select('-password')
       .sort({ createdAt: -1 })
-      .lean(); // Convert to plain JavaScript objects
+      .lean();
     
-    // Map _id to id for frontend compatibility
-    const instructorsWithId = instructors.map(inst => ({
-      ...inst,
-      id: inst._id.toString(), // Add id field
-      _id: inst._id.toString()  // Keep _id as string too
-    }));
+    // Find all vehicles currently in use ('busy')
+    const busyVehicles = await Vehicle.find({
+      status: 'busy',
+      current_instructor_id: { $ne: null }
+    }).select('current_instructor_id registration_number model').lean();
+
+    const busyMap = new Map();
+    busyVehicles.forEach(v => {
+      if (v.current_instructor_id) {
+        busyMap.set(v.current_instructor_id.toString(), {
+          registration_number: v.registration_number,
+          model: v.model
+        });
+      }
+    });
+
+    // Map id and busy status for frontend compatibility
+    const instructorsWithId = instructors.map(inst => {
+      const instId = inst._id.toString();
+      const busyVehicle = busyMap.get(instId) || null;
+      return {
+        ...inst,
+        id: instId,
+        _id: instId,
+        is_busy: !!busyVehicle,
+        busy_vehicle: busyVehicle
+      };
+    });
     
     res.json({
       success: true,
@@ -78,7 +64,8 @@ router.get('/instructors', authMiddleware, async (req, res) => {
     console.error('Get instructors error:', error);
     res.status(500).json({ 
       success: false,
-      message: 'Failed to fetch instructors' 
+      message: 'Failed to fetch instructors',
+      error: error.message
     });
   }
 });
@@ -167,7 +154,7 @@ router.put('/instructors/:id', authMiddleware, isAdmin, async (req, res) => {
       });
     }
 
-    // Check if email is being changed and if it's already taken
+    // Check if email is being changed and if it is already taken
     if (email && email !== instructor.email) {
       const existingEmail = await User.findOne({ email });
       if (existingEmail) {
@@ -230,7 +217,7 @@ router.patch('/instructors/:id/toggle-status', authMiddleware, isAdmin, async (r
 
     res.json({ 
       success: true,
-      message: `Instructor ${instructor.status === 'active' ? 'activated' : 'deactivated'} successfully`,
+      message: 'Instructor ' + (instructor.status === 'active' ? 'activated' : 'deactivated') + ' successfully',
       instructor: instructorData
     });
 

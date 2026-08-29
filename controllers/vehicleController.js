@@ -305,6 +305,19 @@ exports.allocateVehicle = async (req, res) => {
 
     console.log('✅ Instructor found:', instructor.full_name);
 
+    // Check if instructor is already allocated to an active vehicle
+    const alreadyBusyVehicle = await Vehicle.findOne({
+      current_instructor_id: instructor_id,
+      status: 'busy'
+    });
+
+    if (alreadyBusyVehicle) {
+      return res.status(400).json({
+        success: false,
+        message: 'Instructor ' + instructor.full_name + ' is already assigned to vehicle ' + alreadyBusyVehicle.registration_number + ' (' + alreadyBusyVehicle.model + ')'
+      });
+    }
+
     if (instructor.status === 'inactive') {
       return res.status(400).json({ 
         success: false,
