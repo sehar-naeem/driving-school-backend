@@ -39,10 +39,8 @@ const vehicleSchema = new mongoose.Schema({
     ref: 'User',
     default: null
   },
-  // ⭐ FIXED: Added 1 to enum for testing
   time_slot: {
     type: Number,
-    enum: [1, 35, 65, 125],  // ✅ Now includes 1 minute for testing
     default: null
   },
   session_start: {
@@ -60,6 +58,20 @@ const vehicleSchema = new mongoose.Schema({
   last_location_update: {
     type: Date,
     default: null
+  },
+  is_parked: {
+    type: Boolean,
+    default: false
+  },
+  parked_at: {
+    type: Date,
+    default: null
+  },
+  extension_request: {
+    minutes: { type: Number, default: null },
+    reason: { type: String, default: '' },
+    requested_at: { type: Date, default: null },
+    status: { type: String, enum: ['pending', 'approved', 'rejected', null], default: null }
   }
 }, {
   timestamps: true

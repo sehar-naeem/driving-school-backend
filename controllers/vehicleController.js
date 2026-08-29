@@ -476,3 +476,175 @@ exports.updateVehicleLocation = async (req, res) => {
     });
   }
 };
+
+/**
+ * @desc    Instructor requests time extension for active vehicle
+ * @route   POST /api/vehicles/:id/request-extension
+ * @access  Private/Instructor
+ */
+exports.requestExtension = async (req, res) => {
+  try {
+    const { minutes, reason, latitude, longitude } = req.body;
+    const vehicle = await Vehicle.findById(req.params.id)
+      .populate('current_instructor_id', 'full_name email phone');
+
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+
+    if (vehicle.status !== 'busy') {
+      return res.status(400).json({ success: false, message: 'Vehicle is not currently in an active session' });
+    }
+
+    const extensionMinutes = Number(minutes) || 15;
+    vehicle.extension_request = {
+      minutes: extensionMinutes,
+      reason: reason || 'Instructor requested additional time',
+      requested_at: new Date(),
+      status: 'pending'
+    };
+
+    if (latitude !== undefined && longitude !== undefined) {
+      vehicle.latitude = Number(latitude);
+      vehicle.longitude = Number(longitude);
+      vehicle.last_location_update = new Date();
+    }
+
+    await vehicle.save();
+
+    const payload = {
+      vehicle_id: vehicle._id,
+      registration_number: vehicle.registration_number,
+      model: vehicle.model,
+      instructor: vehicle.current_instructor_id ? vehicle.current_instructor_id.full_name : 'Instructor',
+      instructor_id: vehicle.current_instructor_id ? vehicle.current_instructor_id._id : null,
+      minutes: extensionMinutes,
+      reason: vehicle.extension_request.reason,
+      latitude: vehicle.latitude,
+      longitude: vehicle.longitude,
+      requested_at: vehicle.extension_request.requested_at
+    };
+
+    if (req.app.get('io')) {
+      req.app.get('io').emit('extension:requested', payload);
+    }
+
+    res.json({
+      success: true,
+      message: 'Extension request sent to administrator',
+      extension_request: vehicle.extension_request,
+      vehicle
+    });
+  } catch (error) {
+    console.error('Request extension error:', error);
+    res.status(500).json({ success: false, message: 'Error requesting extension', error: error.message });
+  }
+};
+
+/**
+ * @desc    Admin responds to instructor extension request (Approve / Decline)
+ * @route   POST /api/vehicles/:id/respond-extension
+ * @access  Private/Admin
+ */
+exports.respondExtension = async (req, res) => {
+  try {
+    const { approved, additional_minutes, message } = req.body;
+    const vehicle = await Vehicle.findById(req.params.id)
+      .populate('current_instructor_id', 'full_name email phone');
+
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+
+    const isApproved = approved === true;
+    const extraMin = Number(additional_minutes) || (vehicle.extension_request?.minutes || 15);
+
+    if (isApproved) {
+      vehicle.time_slot = (Number(vehicle.time_slot) || 0) + extraMin;
+      vehicle.extension_request.status = 'approved';
+    } else {
+      vehicle.extension_request.status = 'rejected';
+    }
+
+    await vehicle.save();
+
+    const payload = {
+      vehicle_id: vehicle._id,
+      registration_number: vehicle.registration_number,
+      model: vehicle.model,
+      approved: isApproved,
+      additional_minutes: isApproved ? extraMin : 0,
+      new_time_slot: vehicle.time_slot,
+      message: message || (isApproved ? 'Extension approved by Admin' : 'Extension request declined by Admin'),
+      vehicle
+    };
+
+    if (req.app.get('io')) {
+      req.app.get('io').emit('extension:responded', payload);
+      req.app.get('io').emit('vehicle:updated', vehicle);
+    }
+
+    res.json({
+      success: true,
+      message: isApproved ? 'Extension approved successfully' : 'Extension declined',
+      vehicle
+    });
+  } catch (error) {
+    console.error('Respond extension error:', error);
+    res.status(500).json({ success: false, message: 'Error responding to extension', error: error.message });
+  }
+};
+
+/**
+ * @desc    Instructor reports vehicle is parked and session finished
+ * @route   POST /api/vehicles/:id/report-parked
+ * @access  Private/Instructor
+ */
+exports.reportParked = async (req, res) => {
+  try {
+    const { latitude, longitude, note } = req.body;
+    const vehicle = await Vehicle.findById(req.params.id)
+      .populate('current_instructor_id', 'full_name email phone');
+
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+
+    vehicle.is_parked = true;
+    vehicle.parked_at = new Date();
+
+    if (latitude !== undefined && longitude !== undefined) {
+      vehicle.latitude = Number(latitude);
+      vehicle.longitude = Number(longitude);
+      vehicle.last_location_update = new Date();
+    }
+
+    await vehicle.save();
+
+    const payload = {
+      vehicle_id: vehicle._id,
+      registration_number: vehicle.registration_number,
+      model: vehicle.model,
+      instructor: vehicle.current_instructor_id ? vehicle.current_instructor_id.full_name : 'Instructor',
+      latitude: vehicle.latitude,
+      longitude: vehicle.longitude,
+      parked_at: vehicle.parked_at,
+      note: note || 'Car parked at driving school'
+    };
+
+    if (req.app.get('io')) {
+      req.app.get('io').emit('vehicle:parked', payload);
+      req.app.get('io').emit('vehicle:updated', vehicle);
+    }
+
+    res.json({
+      success: true,
+      message: 'Vehicle reported as parked successfully',
+      parked_info: payload,
+      vehicle
+    });
+  } catch (error) {
+    console.error('Report parked error:', error);
+    res.status(500).json({ success: false, message: 'Error reporting parked vehicle', error: error.message });
+  }
+};

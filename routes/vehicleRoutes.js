@@ -15,8 +15,11 @@ router.put('/:id', authMiddleware, checkRole('admin'), vehicleController.updateV
 router.delete('/:id', authMiddleware, checkRole('admin'), vehicleController.deleteVehicle);
 router.post('/allocate', authMiddleware, checkRole('admin'), vehicleController.allocateVehicle);
 router.post('/:id/release', authMiddleware, checkRole('admin'), vehicleController.releaseVehicle);
+router.post('/:id/respond-extension', authMiddleware, checkRole('admin'), vehicleController.respondExtension);
 
-// Location update (can be accessed by both admin and instructor)
+// Instructor / User accessible routes
 router.patch('/:id/location', authMiddleware, vehicleController.updateVehicleLocation);
+router.post('/:id/request-extension', authMiddleware, vehicleController.requestExtension);
+router.post('/:id/report-parked', authMiddleware, vehicleController.reportParked);
 
 module.exports = router;
