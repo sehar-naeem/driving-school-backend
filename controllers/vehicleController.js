@@ -507,6 +507,10 @@ exports.requestExtension = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Vehicle is not currently in an active session' });
     }
 
+    if (vehicle.is_parked) {
+      return res.status(400).json({ success: false, message: 'Vehicle is already parked and ride is finished. Cannot request extension.' });
+    }
+
     const extensionMinutes = Number(minutes) || 15;
     vehicle.extension_request = {
       minutes: extensionMinutes,
@@ -623,6 +627,8 @@ exports.reportParked = async (req, res) => {
 
     vehicle.is_parked = true;
     vehicle.parked_at = new Date();
+    vehicle.instructor_status = 'parked';
+    vehicle.extension_request = null;
 
     if (latitude !== undefined && longitude !== undefined) {
       vehicle.latitude = Number(latitude);
