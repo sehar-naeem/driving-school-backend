@@ -511,6 +511,13 @@ exports.requestExtension = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Vehicle is already parked and ride is finished. Cannot request extension.' });
     }
 
+    if (vehicle.extension_request && vehicle.extension_request.status === 'pending') {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'An extension request is already pending Admin approval. Please wait for the admin to reply.' 
+      });
+    }
+
     const extensionMinutes = Number(minutes) || 15;
     vehicle.extension_request = {
       minutes: extensionMinutes,
@@ -542,6 +549,7 @@ exports.requestExtension = async (req, res) => {
 
     if (req.app.get('io')) {
       req.app.get('io').emit('extension:requested', payload);
+      req.app.get('io').emit('extension:request', payload);
     }
 
     res.json({
@@ -596,6 +604,7 @@ exports.respondExtension = async (req, res) => {
 
     if (req.app.get('io')) {
       req.app.get('io').emit('extension:responded', payload);
+      req.app.get('io').emit('extension:respond', payload);
       req.app.get('io').emit('vehicle:updated', vehicle);
     }
 
