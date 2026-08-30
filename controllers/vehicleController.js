@@ -258,7 +258,7 @@ exports.allocateVehicle = async (req, res) => {
     }
 
     const timeSlotNum = Number(time_slot);
-    const validTimeSlots = [1, 35, 65, 125];
+    const validTimeSlots = [1, 10, 35, 65, 125];
     
     if (!validTimeSlots.includes(timeSlotNum) || isNaN(timeSlotNum)) {
       return res.status(400).json({ 
@@ -329,6 +329,9 @@ exports.allocateVehicle = async (req, res) => {
     vehicle.current_instructor_id = instructor_id;
     vehicle.time_slot = timeSlotNum;
     vehicle.session_start = new Date();
+    vehicle.instructor_status = 'assigned';
+    vehicle.instructor_acknowledged_at = null;
+    vehicle.is_parked = false;
     
     console.log('💾 Saving vehicle...');
 
@@ -341,6 +344,14 @@ exports.allocateVehicle = async (req, res) => {
 
     if (req.app.get('io')) {
       req.app.get('io').emit('vehicle:allocated', updatedVehicle);
+      req.app.get('io').emit('allocation:created', {
+        vehicle: updatedVehicle,
+        vehicle_id: updatedVehicle._id,
+        instructor_id: instructor_id,
+        registration_number: updatedVehicle.registration_number,
+        model: updatedVehicle.model,
+        time_slot: updatedVehicle.time_slot
+      });
     }
 
     res.json({
@@ -646,5 +657,60 @@ exports.reportParked = async (req, res) => {
   } catch (error) {
     console.error('Report parked error:', error);
     res.status(500).json({ success: false, message: 'Error reporting parked vehicle', error: error.message });
+  }
+};
+
+
+/**
+ * @desc    Instructor acknowledges allocation and marks "On My Way / Start Lesson"
+ * @route   POST /api/vehicles/:id/acknowledge-allocation
+ * @access  Private/Instructor
+ */
+exports.acknowledgeAllocation = async (req, res) => {
+  try {
+    const { status, latitude, longitude } = req.body;
+    const vehicle = await Vehicle.findById(req.params.id)
+      .populate('current_instructor_id', 'full_name email phone');
+
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+
+    vehicle.instructor_status = status || 'on_way';
+    vehicle.instructor_acknowledged_at = new Date();
+
+    if (latitude !== undefined && longitude !== undefined) {
+      vehicle.latitude = Number(latitude);
+      vehicle.longitude = Number(longitude);
+      vehicle.last_location_update = new Date();
+    }
+
+    await vehicle.save();
+
+    const payload = {
+      vehicle_id: vehicle._id,
+      registration_number: vehicle.registration_number,
+      model: vehicle.model,
+      instructor: vehicle.current_instructor_id ? vehicle.current_instructor_id.full_name : 'Instructor',
+      instructor_id: vehicle.current_instructor_id ? vehicle.current_instructor_id._id : null,
+      instructor_status: vehicle.instructor_status,
+      acknowledged_at: vehicle.instructor_acknowledged_at,
+      latitude: vehicle.latitude,
+      longitude: vehicle.longitude
+    };
+
+    if (req.app.get('io')) {
+      req.app.get('io').emit('instructor:on_way', payload);
+      req.app.get('io').emit('vehicle:updated', vehicle);
+    }
+
+    res.json({
+      success: true,
+      message: 'Allocation acknowledged successfully. Admin notified that instructor is on the way!',
+      vehicle
+    });
+  } catch (error) {
+    console.error('Acknowledge allocation error:', error);
+    res.status(500).json({ success: false, message: 'Error acknowledging allocation', error: error.message });
   }
 };

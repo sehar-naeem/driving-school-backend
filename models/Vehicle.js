@@ -59,6 +59,15 @@ const vehicleSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  instructor_status: {
+    type: String,
+    enum: ['assigned', 'on_way', 'in_lesson', 'parked', null],
+    default: null
+  },
+  instructor_acknowledged_at: {
+    type: Date,
+    default: null
+  },
   is_parked: {
     type: Boolean,
     default: false
