@@ -76,6 +76,17 @@ const vehicleSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  last_event: {
+    event_type: {
+      type: String,
+      enum: ['lesson_started', 'allocation_declined', null],
+      default: null
+    },
+    instructor: { type: String, default: '' },
+    reason: { type: String, default: '' },
+    timestamp: { type: Date, default: null },
+    dismissed_by_admin: { type: Boolean, default: true }
+  },
   extension_request: {
     minutes: { type: Number, default: null },
     reason: { type: String, default: '' },

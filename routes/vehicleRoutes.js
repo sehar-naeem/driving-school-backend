@@ -16,6 +16,7 @@ router.delete('/:id', authMiddleware, checkRole('admin'), vehicleController.dele
 router.post('/allocate', authMiddleware, checkRole('admin'), vehicleController.allocateVehicle);
 router.post('/:id/release', authMiddleware, checkRole('admin'), vehicleController.releaseVehicle);
 router.post('/:id/respond-extension', authMiddleware, checkRole('admin'), vehicleController.respondExtension);
+router.post('/:id/dismiss-event', authMiddleware, checkRole('admin'), vehicleController.dismissVehicleEvent);
 
 // Instructor / User accessible routes
 router.patch('/:id/location', authMiddleware, vehicleController.updateVehicleLocation);

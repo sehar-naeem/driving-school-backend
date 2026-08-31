@@ -695,6 +695,12 @@ exports.acknowledgeAllocation = async (req, res) => {
     vehicle.instructor_status = status || 'on_way';
     vehicle.instructor_acknowledged_at = new Date();
     vehicle.session_start = new Date();
+    vehicle.last_event = {
+      event_type: 'lesson_started',
+      instructor: vehicle.current_instructor_id ? vehicle.current_instructor_id.full_name : 'Instructor',
+      timestamp: new Date(),
+      dismissed_by_admin: false
+    };
 
     if (latitude !== undefined && longitude !== undefined) {
       vehicle.latitude = Number(latitude);
@@ -762,6 +768,13 @@ exports.declineAllocation = async (req, res) => {
     vehicle.time_slot = null;
     vehicle.extension_request = null;
     vehicle.is_parked = false;
+    vehicle.last_event = {
+      event_type: 'allocation_declined',
+      instructor: instructorName,
+      reason: reason || 'Instructor declined the allocation',
+      timestamp: new Date(),
+      dismissed_by_admin: false
+    };
 
     await vehicle.save();
 
@@ -789,5 +802,31 @@ exports.declineAllocation = async (req, res) => {
   } catch (error) {
     console.error('Decline allocation error:', error);
     res.status(500).json({ success: false, message: 'Error declining allocation', error: error.message });
+  }
+};
+
+/**
+ * @desc    Admin dismisses a vehicle event notification
+ * @route   POST /api/vehicles/:id/dismiss-event
+ * @access  Private/Admin
+ */
+exports.dismissVehicleEvent = async (req, res) => {
+  try {
+    const vehicle = await Vehicle.findById(req.params.id);
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+    if (vehicle.last_event) {
+      vehicle.last_event.dismissed_by_admin = true;
+      await vehicle.save();
+    }
+    res.json({
+      success: true,
+      message: 'Vehicle event dismissed successfully',
+      vehicle
+    });
+  } catch (error) {
+    console.error('Dismiss vehicle event error:', error);
+    res.status(500).json({ success: false, message: 'Error dismissing vehicle event', error: error.message });
   }
 };
