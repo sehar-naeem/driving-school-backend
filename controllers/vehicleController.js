@@ -583,11 +583,21 @@ exports.respondExtension = async (req, res) => {
     const isApproved = approved === true;
     const extraMin = Number(additional_minutes) || (vehicle.extension_request?.minutes || 15);
 
+    if (!vehicle.extension_request) {
+      vehicle.extension_request = {};
+    }
+
     if (isApproved) {
       vehicle.time_slot = (Number(vehicle.time_slot) || 0) + extraMin;
       vehicle.extension_request.status = 'approved';
+      vehicle.extension_request.admin_minutes = extraMin;
+      vehicle.extension_request.admin_message = message || `Approved +${extraMin} minutes extra lesson time by Admin.`;
+      vehicle.extension_request.dismissed_by_instructor = false;
     } else {
       vehicle.extension_request.status = 'rejected';
+      vehicle.extension_request.admin_minutes = 0;
+      vehicle.extension_request.admin_message = message || 'Extension request declined by Admin. Please return to the school as soon as possible.';
+      vehicle.extension_request.dismissed_by_instructor = false;
     }
 
     await vehicle.save();
@@ -599,7 +609,8 @@ exports.respondExtension = async (req, res) => {
       approved: isApproved,
       additional_minutes: isApproved ? extraMin : 0,
       new_time_slot: vehicle.time_slot,
-      message: message || (isApproved ? 'Extension approved by Admin' : 'Extension request declined by Admin'),
+      message: vehicle.extension_request.admin_message,
+      instructor_id: vehicle.current_instructor_id ? vehicle.current_instructor_id._id : null,
       vehicle
     };
 
@@ -621,10 +632,27 @@ exports.respondExtension = async (req, res) => {
 };
 
 /**
- * @desc    Instructor reports vehicle is parked and session finished
- * @route   POST /api/vehicles/:id/report-parked
+ * @desc    Instructor dismisses extension response notification
+ * @route   POST /api/vehicles/:id/dismiss-extension-response
  * @access  Private/Instructor
  */
+exports.dismissExtensionResponse = async (req, res) => {
+  try {
+    const vehicle = await Vehicle.findById(req.params.id);
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+    if (vehicle.extension_request) {
+      vehicle.extension_request.dismissed_by_instructor = true;
+      await vehicle.save();
+    }
+    res.json({ success: true, message: 'Extension response dismissed by instructor', vehicle });
+  } catch (error) {
+    console.error('Dismiss extension response error:', error);
+    res.status(500).json({ success: false, message: 'Error dismissing extension response', error: error.message });
+  }
+};
+
 exports.reportParked = async (req, res) => {
   try {
     const { latitude, longitude, note } = req.body;

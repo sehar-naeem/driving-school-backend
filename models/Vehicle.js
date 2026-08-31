@@ -91,7 +91,10 @@ const vehicleSchema = new mongoose.Schema({
     minutes: { type: Number, default: null },
     reason: { type: String, default: '' },
     requested_at: { type: Date, default: null },
-    status: { type: String, enum: ['pending', 'approved', 'rejected', null], default: null }
+    status: { type: String, enum: ['pending', 'approved', 'rejected', null], default: null },
+    admin_message: { type: String, default: '' },
+    admin_minutes: { type: Number, default: 0 },
+    dismissed_by_instructor: { type: Boolean, default: false }
   }
 }, {
   timestamps: true

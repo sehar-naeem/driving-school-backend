@@ -24,5 +24,6 @@ router.post('/:id/acknowledge-allocation', authMiddleware, vehicleController.ack
 router.post('/:id/decline-allocation', authMiddleware, vehicleController.declineAllocation);
 router.post('/:id/request-extension', authMiddleware, vehicleController.requestExtension);
 router.post('/:id/report-parked', authMiddleware, vehicleController.reportParked);
+router.post('/:id/dismiss-extension-response', authMiddleware, vehicleController.dismissExtensionResponse);
 
 module.exports = router;
