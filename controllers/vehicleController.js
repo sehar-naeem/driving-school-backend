@@ -328,7 +328,7 @@ exports.allocateVehicle = async (req, res) => {
     vehicle.status = 'busy';
     vehicle.current_instructor_id = instructor_id;
     vehicle.time_slot = timeSlotNum;
-    vehicle.session_start = new Date();
+    vehicle.session_start = null;
     vehicle.instructor_status = 'assigned';
     vehicle.instructor_acknowledged_at = null;
     vehicle.is_parked = false;
@@ -693,6 +693,7 @@ exports.acknowledgeAllocation = async (req, res) => {
 
     vehicle.instructor_status = status || 'on_way';
     vehicle.instructor_acknowledged_at = new Date();
+    vehicle.session_start = new Date();
 
     if (latitude !== undefined && longitude !== undefined) {
       vehicle.latitude = Number(latitude);
@@ -727,5 +728,65 @@ exports.acknowledgeAllocation = async (req, res) => {
   } catch (error) {
     console.error('Acknowledge allocation error:', error);
     res.status(500).json({ success: false, message: 'Error acknowledging allocation', error: error.message });
+  }
+};
+
+
+/**
+ * @desc    Instructor declines/rejects vehicle allocation
+ * @route   POST /api/vehicles/:id/decline-allocation
+ * @access  Private/Instructor
+ */
+exports.declineAllocation = async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const vehicle = await Vehicle.findById(req.params.id)
+      .populate('current_instructor_id', 'full_name email phone');
+
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+
+    const instructorName = vehicle.current_instructor_id ? vehicle.current_instructor_id.full_name : 'Instructor';
+    const instructorId = vehicle.current_instructor_id ? vehicle.current_instructor_id._id : null;
+    const regNumber = vehicle.registration_number;
+    const model = vehicle.model;
+
+    // Release vehicle completely back to vacant
+    vehicle.status = 'vacant';
+    vehicle.current_instructor_id = null;
+    vehicle.instructor_status = null;
+    vehicle.session_start = null;
+    vehicle.instructor_acknowledged_at = null;
+    vehicle.time_slot = null;
+    vehicle.extension_request = null;
+    vehicle.is_parked = false;
+
+    await vehicle.save();
+
+    const payload = {
+      vehicle_id: vehicle._id,
+      registration_number: regNumber,
+      model: model,
+      instructor: instructorName,
+      instructor_id: instructorId,
+      reason: reason || 'Instructor declined the allocation',
+      declined_at: new Date()
+    };
+
+    if (req.app.get('io')) {
+      req.app.get('io').emit('allocation:declined', payload);
+      req.app.get('io').emit('vehicle:updated', vehicle);
+      req.app.get('io').emit('vehicle:released', { vehicle_id: vehicle._id });
+    }
+
+    res.json({
+      success: true,
+      message: 'Allocation declined and vehicle released back to vacant.',
+      vehicle
+    });
+  } catch (error) {
+    console.error('Decline allocation error:', error);
+    res.status(500).json({ success: false, message: 'Error declining allocation', error: error.message });
   }
 };

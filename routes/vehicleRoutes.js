@@ -20,6 +20,7 @@ router.post('/:id/respond-extension', authMiddleware, checkRole('admin'), vehicl
 // Instructor / User accessible routes
 router.patch('/:id/location', authMiddleware, vehicleController.updateVehicleLocation);
 router.post('/:id/acknowledge-allocation', authMiddleware, vehicleController.acknowledgeAllocation);
+router.post('/:id/decline-allocation', authMiddleware, vehicleController.declineAllocation);
 router.post('/:id/request-extension', authMiddleware, vehicleController.requestExtension);
 router.post('/:id/report-parked', authMiddleware, vehicleController.reportParked);
 
