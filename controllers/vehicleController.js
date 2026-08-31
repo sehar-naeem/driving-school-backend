@@ -538,6 +538,7 @@ exports.requestExtension = async (req, res) => {
       vehicle_id: vehicle._id,
       registration_number: vehicle.registration_number,
       model: vehicle.model,
+      time_slot: vehicle.time_slot,
       instructor: vehicle.current_instructor_id ? vehicle.current_instructor_id.full_name : 'Instructor',
       instructor_id: vehicle.current_instructor_id ? vehicle.current_instructor_id._id : null,
       minutes: extensionMinutes,
