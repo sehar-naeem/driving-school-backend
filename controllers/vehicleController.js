@@ -1,3 +1,4 @@
+const LessonReport = require('../models/LessonReport');
 const Vehicle = require('../models/Vehicle');
 const User = require('../models/User');
 
@@ -534,6 +535,17 @@ exports.requestExtension = async (req, res) => {
 
     await vehicle.save();
 
+    // Update LessonReport to in_progress
+    try {
+      await LessonReport.findOneAndUpdate(
+        { vehicle_id: vehicle._id, status: 'assigned' },
+        { status: 'in_progress', started_at: new Date() },
+        { sort: { allocated_at: -1 } }
+      );
+    } catch (e) {
+      console.warn('LessonReport acknowledge update error:', e);
+    }
+
     const payload = {
       vehicle_id: vehicle._id,
       registration_number: vehicle.registration_number,
@@ -601,6 +613,21 @@ exports.respondExtension = async (req, res) => {
     }
 
     await vehicle.save();
+
+    // Update LessonReport to declined
+    try {
+      await LessonReport.findOneAndUpdate(
+        { vehicle_id: vehicle._id, status: 'assigned' },
+        { 
+          status: 'declined', 
+          declined_at: new Date(),
+          declined_reason: reason || 'Instructor declined the allocation'
+        },
+        { sort: { allocated_at: -1 } }
+      );
+    } catch (e) {
+      console.warn('LessonReport decline update error:', e);
+    }
 
     const payload = {
       vehicle_id: vehicle._id,
@@ -676,6 +703,26 @@ exports.reportParked = async (req, res) => {
 
     await vehicle.save();
 
+    // Append extension to LessonReport
+    try {
+      await LessonReport.findOneAndUpdate(
+        { vehicle_id: vehicle._id, status: 'in_progress' },
+        {
+          $push: {
+            extensions: {
+              requested_minutes: Number(minutes) || 15,
+              reason: reason || '',
+              requested_at: new Date(),
+              status: 'pending'
+            }
+          }
+        },
+        { sort: { allocated_at: -1 } }
+      );
+    } catch (e) {
+      console.warn('LessonReport extension request error:', e);
+    }
+
     const payload = {
       vehicle_id: vehicle._id,
       registration_number: vehicle.registration_number,
@@ -737,6 +784,29 @@ exports.acknowledgeAllocation = async (req, res) => {
     }
 
     await vehicle.save();
+
+    // Update extension in LessonReport
+    try {
+      const activeReport = await LessonReport.findOne(
+        { vehicle_id: vehicle._id, status: { $in: ['in_progress', 'assigned'] } }
+      ).sort({ allocated_at: -1 });
+
+      if (activeReport && Array.isArray(activeReport.extensions) && activeReport.extensions.length > 0) {
+        const lastExt = activeReport.extensions[activeReport.extensions.length - 1];
+        if (lastExt.status === 'pending') {
+          lastExt.status = isApproved ? 'approved' : 'rejected';
+          lastExt.admin_minutes = isApproved ? extraMin : 0;
+          lastExt.admin_message = message || (isApproved ? 'Approved by Admin' : 'Declined by Admin');
+          lastExt.responded_at = new Date();
+          if (isApproved) {
+            activeReport.total_duration_minutes = (activeReport.total_duration_minutes || activeReport.initial_time_slot || 35) + extraMin;
+          }
+          await activeReport.save();
+        }
+      }
+    } catch (e) {
+      console.warn('LessonReport respond extension error:', e);
+    }
 
     const payload = {
       vehicle_id: vehicle._id,
@@ -805,6 +875,21 @@ exports.declineAllocation = async (req, res) => {
     };
 
     await vehicle.save();
+
+    // Mark LessonReport as completed
+    try {
+      await LessonReport.findOneAndUpdate(
+        { vehicle_id: vehicle._id, status: { $in: ['in_progress', 'assigned'] } },
+        { 
+          status: 'completed', 
+          completed_at: new Date(),
+          parked_note: note || 'Vehicle parked safely'
+        },
+        { sort: { allocated_at: -1 } }
+      );
+    } catch (e) {
+      console.warn('LessonReport parked update error:', e);
+    }
 
     const payload = {
       vehicle_id: vehicle._id,

@@ -11,7 +11,8 @@ const vehicleRoutes = require('./routes/vehicleRoutes');
 const complaintRoutes = require('./routes/complaintRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const mapRoutes = require('./routes/mapRoutes');
-const userRoutes = require('./routes/userRoutes');  // ✅ FIXED: Capital 'R'
+const userRoutes = require('./routes/userRoutes');
+const reportRoutes = require('./routes/reportRoutes');  // ✅ FIXED: Capital 'R'
 
 // Initialize express app
 const app = express();
@@ -44,7 +45,8 @@ app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/map', mapRoutes);
-app.use('/api/users', userRoutes);  // ✅ FIXED: Variable name matches
+app.use('/api/users', userRoutes);
+app.use('/api/reports', reportRoutes);  // ✅ FIXED: Variable name matches
 
 
 // Health check endpoint
